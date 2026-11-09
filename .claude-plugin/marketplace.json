@@ -1,0 +1,5 @@
+{
+  "name": "claude-mods",
+  "owner": { "name": "deeksh2030-design" },
+  "plugins": [{ "name": "agent-info", "source": "./" }]
+}
