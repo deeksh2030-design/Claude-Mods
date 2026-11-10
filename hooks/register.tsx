@@ -100,13 +100,16 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'agent-info' }, async $ => {
-    await $.ui.open({ id: PANE, title: TITLE })
+    const { isPlaced } = await $.ui.open({ id: PANE, title: TITLE })
+    const where = isPlaced
+      ? 'Agent info pane opened.'
+      : `This app (${(await $.session.surfaces()).join(', ') || 'none'}) did not place the pane; progress shows in the band above the prompt and the status line instead.`
     const run = await read($, runAtom)
-    if (!run) return { text: 'Agent info pane opened. It fills in when the next task starts.' }
+    if (!run) return { text: `${where} It fills in when the next task starts.` }
     const p = progressOf(run, await read($, historyAtom))
     const est = estimate(run, p)
     return {
-      text: `Agent info pane opened. ${run.isRunning ? 'Running' : 'Last task'}: ${Math.round(
+      text: `${where} ${run.isRunning ? 'Running' : 'Last task'}: ${Math.round(
         p.ratio * 100,
       )}% (${p.label}), ${usd(est.spent)} spent${est.total ? `, ~${usd(est.total)} estimated total` : ''}.`,
     }
@@ -220,6 +223,25 @@ export const register: Register = on => {
     if (steps > 0 && !e.isAborted) await update($, historyAtom, h => [...h, steps].slice(-20))
     $.ui.status(undefined)
     return next(e)
+  })
+
+  // Fallback that every surface draws: a one-line bar above the prompt while a task runs.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const run = await read($, runAtom)
+    if (e.props.hasSurvey || !run || !run.isRunning) return next(e)
+    const { Box, Text } = $.ui.resolve(e)
+    const p = progressOf(run, await read($, historyAtom))
+    const est = estimate(run, p)
+    const width = Math.max(8, Math.min(24, (e.props.bodyColumns ?? 60) - 40))
+    return (
+      <Box>
+        <Text>
+          <Text color="claude">{bar(p.ratio, width)}</Text> {Math.round(p.ratio * 100)}% · {clockText(est.elapsed)} ·{' '}
+          {usd(est.spent)}
+          {est.total !== undefined ? ` → ~${usd(est.total)}` : ''}
+        </Text>
+      </Box>
+    )
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
